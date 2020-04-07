@@ -21,6 +21,16 @@ Reason: Props must be returned as a plain object from test: \`{ props: { ... } }
   })
 
   it('allows all different types of props', () => {
+    class SerializableType {
+      toJSON() {
+        return {
+          str: 'test',
+          date: new Date(),
+          arr: ['f', true, -5, {}],
+        }
+      }
+    }
+
     expect(
       isSerializableProps('/', 'test', {
         str: 'foobar',
@@ -30,6 +40,8 @@ Reason: Props must be returned as a plain object from test: \`{ props: { ... } }
         numn1: -1,
         num5: 5,
         noop: null,
+        date: new Date(),
+        serializable: new SerializableType(),
         arr: [
           'f',
           true,
@@ -86,12 +98,6 @@ Reason: Props must be returned as a plain object from test: \`{ props: { ... } }
   })
 
   it('disallows top-level non-serializable types', () => {
-    expect(() => isSerializableProps('/', 'test', { toplevel: new Date() }))
-      .toThrowErrorMatchingInlineSnapshot(`
-"Error serializing \`.toplevel\` returned from \`test\` in \\"/\\".
-Reason: \`object\` (\\"[object Date]\\") cannot be serialized as JSON. Please only return JSON serializable data types."
-`)
-
     expect(() => isSerializableProps('/', 'test', { toplevel: class A {} }))
       .toThrowErrorMatchingInlineSnapshot(`
 "Error serializing \`.toplevel\` returned from \`test\` in \\"/\\".
@@ -116,16 +122,18 @@ Reason: \`symbol\` cannot be serialized as JSON. Please only return JSON seriali
 "Error serializing \`.toplevel\` returned from \`test\` in \\"/\\".
 Reason: \`function\` cannot be serialized as JSON. Please only return JSON serializable data types."
 `)
+
+    class UnserializableType {}
+
+    expect(() =>
+      isSerializableProps('/', 'test', { toplevel: new UnserializableType() })
+    ).toThrowErrorMatchingInlineSnapshot(`
+"Error serializing \`.toplevel\` returned from \`test\` in \\"/\\".
+Reason: \`object\` (\\"[object Object]\\") cannot be serialized as JSON. Please only return JSON serializable data types."
+`)
   })
 
   it('diallows nested non-serializable types', () => {
-    expect(() =>
-      isSerializableProps('/', 'test', { k: { a: [1, { n: new Date() }] } })
-    ).toThrowErrorMatchingInlineSnapshot(`
-"Error serializing \`.k.a[1].n\` returned from \`test\` in \\"/\\".
-Reason: \`object\` (\\"[object Date]\\") cannot be serialized as JSON. Please only return JSON serializable data types."
-`)
-
     expect(() =>
       isSerializableProps('/', 'test', { k: { a: [1, { n: class A {} }] } })
     ).toThrowErrorMatchingInlineSnapshot(`
@@ -151,6 +159,39 @@ Reason: \`symbol\` cannot be serialized as JSON. Please only return JSON seriali
     ).toThrowErrorMatchingInlineSnapshot(`
 "Error serializing \`.k.a[0]\` returned from \`test\` in \\"/\\".
 Reason: \`function\` cannot be serialized as JSON. Please only return JSON serializable data types."
+`)
+
+    class UnserializableType {}
+    class SerializableType {
+      toJSON() {
+        return {
+          unserializable: new UnserializableType(),
+        }
+      }
+    }
+
+    expect(() =>
+      isSerializableProps('/', 'test', { k: { a: new SerializableType() } })
+    ).toThrowErrorMatchingInlineSnapshot(`
+"Error serializing \`.k.a.unserializable\` returned from \`test\` in \\"/\\".
+Reason: \`object\` (\\"[object Object]\\") cannot be serialized as JSON. Please only return JSON serializable data types."
+`)
+  })
+
+  it('disallows failing toJSON calls', () => {
+    class FailingSerializableType {
+      toJSON() {
+        throw new Error('Could not serialize.')
+      }
+    }
+
+    expect(() =>
+      isSerializableProps('/', 'test', {
+        k: { a: new FailingSerializableType() },
+      })
+    ).toThrowErrorMatchingInlineSnapshot(`
+"Error serializing \`.k.a\` returned from \`test\` in \\"/\\".
+Reason: Unknown error encountered while calling toJSON: Error: Could not serialize."
 `)
   })
 

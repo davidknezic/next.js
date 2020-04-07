@@ -12,9 +12,9 @@ function isPlainObject(value: any): boolean {
 export function isSerializableProps(
   page: string,
   method: string,
-  input: any
+  props: any
 ): true {
-  if (!isPlainObject(input)) {
+  if (!isPlainObject(props)) {
     throw new SerializableError(
       page,
       method,
@@ -40,9 +40,25 @@ export function isSerializableProps(
 
   function isSerializable(
     refs: Map<any, string>,
-    value: any,
+    input: any,
     path: string
   ): true {
+    let value: any
+    if (input && typeof input.toJSON === 'function') {
+      try {
+        value = input.toJSON()
+      } catch (error) {
+        throw new SerializableError(
+          page,
+          method,
+          path,
+          `Unknown error encountered while calling toJSON: ${error.toString()}`
+        )
+      }
+    } else {
+      value = input
+    }
+
     const type = typeof value
     if (
       // `null` can be serialized, but not `undefined`.
@@ -131,7 +147,7 @@ export function isSerializableProps(
     )
   }
 
-  return isSerializable(new Map(), input, '')
+  return isSerializable(new Map(), props, '')
 }
 
 export class SerializableError extends Error {
